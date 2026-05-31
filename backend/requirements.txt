@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+python-dotenv
+langchain
+langchain_groq
+langchain-community
+chromadb
+sentence-transformers
+pypdf
+python-multipart
+passlib[bcrypt]
+httpx
+fastapi
+PyJWT
+pydantic_settings

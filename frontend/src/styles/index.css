@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0a0c0f;
+  --bg-secondary: #0f1318;
+  --bg-card: #13181f;
+  --bg-hover: #1a2130;
+  --border: #1e2a38;
+  --border-bright: #2a3d52;
+  --blue: #1d6fff;
+  --blue-bright: #4d8fff;
+  --blue-dim: #0d3a8a;
+  --blue-glow: rgba(29, 111, 255, 0.15);
+  --text-primary: #e8edf5;
+  --text-secondary: #8a9bb0;
+  --text-muted: #4a5a6a;
+  --graphite: #1e2a38;
+  --success: #00c896;
+  --warning: #ffaa00;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--blue-dim); }
+
+::selection { background: var(--blue-dim); color: var(--text-primary); }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-blue {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(29, 111, 255, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(29, 111, 255, 0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.animate-in { animation: fadeIn 0.4s ease both; }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-hover) 50%, var(--bg-card) 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 6px;
+}
+
+.cursor-blink {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--blue);
+  margin-left: 2px;
+  vertical-align: middle;
+  animation: blink 1s infinite;
+}
+
+.mono { font-family: 'Space Mono', monospace; }
