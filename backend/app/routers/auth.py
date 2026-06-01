@@ -73,3 +73,29 @@ def get_chat_history(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+@router.delete("/history/{chat_id}")
+def delete_chat(chat_id: int, token: str, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username = payload.get("sub")
+        user = get_user_by_username(db, username)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        from app.models.db_models import ChatHistory
+        chat = db.query(ChatHistory).filter(
+            ChatHistory.id == chat_id,
+            ChatHistory.user_id == user.id
+        ).first()
+
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
+
+        db.delete(chat)
+        db.commit()
+        return {"message": "Chat deleted"}
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
