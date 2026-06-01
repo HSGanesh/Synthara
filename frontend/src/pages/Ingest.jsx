@@ -10,23 +10,24 @@ export default function Ingest() {
 
   const handleUpload = async (file) => {
     if (!collectionName.trim()) {
-      setError('Please enter a collection name before uploading.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
+        setError('Please enter a collection name before uploading.')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
     }
     setLoading(true)
     setResult(null)
     setError(null)
     try {
-      const res = await uploadFile(file, collectionName.trim())
-      setResult(res)
+        const username = localStorage.getItem('username')
+        const scopedCollection = `${username}__${collectionName.trim()}`
+        const res = await uploadFile(file, scopedCollection)
+        setResult(res)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Upload failed. Check if backend is running.')
+        setError(err.response?.data?.detail || 'Upload failed. Check if backend is running.')
     } finally {
-      setLoading(false)
+        setLoading(false)
     }
-  }
-
+    }
   return (
     <div style={{ minHeight: '100vh', paddingTop: '56px' }}>
       <div style={{ maxWidth: '640px', margin: '0 auto', padding: '48px 32px' }}>

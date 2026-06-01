@@ -11,10 +11,26 @@ API.interceptors.request.use((config) => {
   return config
 })
 
+// Auto logout on token expiry
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('username')
+      localStorage.removeItem('synthara_chat')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
 export const askQuestion = async (question, collectionName = "synthara_default") => {
+  const token = localStorage.getItem('token')
   const res = await API.post('/api/query/ask', {
     question,
-    collection_name: collectionName
+    collection_name: collectionName,
+    token: token || null
   })
   return res.data
 }
@@ -33,13 +49,26 @@ export const getCollections = async () => {
   return res.data
 }
 
-export const getLastCollection = async () => {
-  const res = await API.get('/api/ingest/last-collection')
+export const getMyCollections = async () => {
+  const token = localStorage.getItem('token')
+  if (!token) return { collections: [] }
+  const res = await API.get(`/api/ingest/my-collections?token=${token}`)
   return res.data
+}
+
+export const getLastCollection = async () => {
+  return { collection: 'synthara_default' }
 }
 
 export const clearKnowledgeBase = async (collectionName = "synthara_default") => {
   const res = await API.delete(`/api/ingest/clear?collection_name=${collectionName}`)
+  return res.data
+}
+
+export const getChatHistory = async () => {
+  const token = localStorage.getItem('token')
+  if (!token) return { history: [] }
+  const res = await API.get(`/api/auth/history?token=${token}`)
   return res.data
 }
 
@@ -50,6 +79,16 @@ export const login = async (username, password) => {
 
 export const register = async (username, password) => {
   const res = await API.post('/api/auth/register', { username, password })
+  return res.data
+}
+
+export const importGitHubRepo = async (repoUrl, collectionName) => {
+  const token = localStorage.getItem('token')
+  const res = await API.post('/api/github/import', {
+    repo_url: repoUrl,
+    collection_name: collectionName,
+    token: token
+  })
   return res.data
 }
 

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from sqlalchemy.orm import Session
+from app.database import get_db
 from app.rag.loader import load_file
 from app.rag.chunker import chunk_documents
 from app.rag.vectorstore import add_documents, list_collections
@@ -37,11 +39,30 @@ async def upload_file(file: UploadFile = File(...), collection_name: str = "synt
         "collection": collection_name
     }
 
-@router.get("/collections")
-def get_collections():
-    collections = list_collections()
-    return {"collections": collections}
+@router.get("/my-collections")
+def get_my_collections(token: str, db: Session = Depends(get_db)):
+    try:
+        import jwt
+        from app.models.db_models import User
 
-@router.get("/last-collection")
-def get_last_collection():
-    return {"collection": last_collection["name"]}
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username = payload.get("sub")
+
+        all_collections = list_collections()
+
+        prefix = f"{username}__"
+        user_collections = [
+            col.replace(prefix, "")
+            for col in all_collections
+            if col.startswith(prefix)  # strictly only user's collections
+        ]
+
+        # Filter out any leftover default names
+        excluded = {"synthara_default", "default"}
+        user_collections = [c for c in user_collections if c not in excluded]
+
+        return {"collections": user_collections}
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")

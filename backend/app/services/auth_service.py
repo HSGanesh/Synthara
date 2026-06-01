@@ -1,12 +1,11 @@
-import jwt
-from datetime import datetime, timedelta
-from passlib.context import CryptContext
+from sqlalchemy.orm import Session
+from app.models.db_models import User
 from app.config import settings
+from passlib.context import CryptContext
+from datetime import datetime, timedelta
+import jwt
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# Simple in-memory user store for MVP
-fake_users_db = {}
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -20,13 +19,23 @@ def create_access_token(data: dict) -> str:
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
-def register_user(username: str, password: str) -> bool:
-    if username in fake_users_db:
+def register_user(db: Session, username: str, password: str) -> bool:
+    existing = db.query(User).filter(User.username == username).first()
+    if existing:
         return False
-    fake_users_db[username] = hash_password(password)
+    user = User(username=username, password=hash_password(password))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return True
 
-def authenticate_user(username: str, password: str) -> bool:
-    if username not in fake_users_db:
-        return False
-    return verify_password(password, fake_users_db[username])
+def authenticate_user(db: Session, username: str, password: str):
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        return None
+    if not verify_password(password, user.password):
+        return None
+    return user
+
+def get_user_by_username(db: Session, username: str):
+    return db.query(User).filter(User.username == username).first()

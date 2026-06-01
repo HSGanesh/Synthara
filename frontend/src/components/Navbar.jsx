@@ -1,11 +1,34 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 
 export default function Navbar() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const [username, setUsername] = useState(null)
+
+  // Re-read username every time route changes
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    const user = localStorage.getItem('username')
+    if (token && user) {
+      setUsername(user)
+    } else {
+      setUsername(null)
+    }
+  }, [location]) // ← this is the key fix
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('username')
+    localStorage.removeItem('synthara_chat')
+    setUsername(null)
+    navigate('/login')
+  }
 
   const links = [
     { to: '/chat', label: 'Ask' },
     { to: '/ingest', label: 'Ingest' },
+     { to: '/github', label: 'GitHub' },
     { to: '/onboarding', label: 'Onboard' },
   ]
 
@@ -33,7 +56,7 @@ export default function Navbar() {
         </span>
       </Link>
 
-      {/* Links */}
+      {/* Nav Links */}
       <div style={{ display: 'flex', gap: '4px' }}>
         {links.map(link => (
           <Link key={link.to} to={link.to} style={{
@@ -52,8 +75,8 @@ export default function Navbar() {
         ))}
       </div>
 
-      {/* Status dot */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      {/* Right side */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div style={{
           width: '6px', height: '6px', borderRadius: '50%',
           background: 'var(--success)',
@@ -62,6 +85,50 @@ export default function Navbar() {
         <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'Space Mono' }}>
           LIVE
         </span>
+
+        {username ? (
+          <>
+            <span style={{
+              fontSize: '12px', color: 'var(--text-secondary)',
+              fontFamily: 'Space Mono', padding: '4px 10px',
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              borderRadius: '6px'
+            }}>
+              {username}
+            </span>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '6px 12px',
+                background: 'transparent',
+                color: '#ff5555',
+                border: '1px solid rgba(255,85,85,0.3)',
+                borderRadius: '6px',
+                fontFamily: 'Space Mono',
+                fontSize: '11px',
+                cursor: 'pointer',
+                fontWeight: 700,
+                letterSpacing: '0.5px'
+              }}
+            >
+              LOGOUT
+            </button>
+          </>
+        ) : (
+          <Link to="/login" style={{
+            textDecoration: 'none',
+            padding: '6px 14px',
+            background: 'var(--blue)',
+            color: '#fff',
+            borderRadius: '6px',
+            fontFamily: 'Space Mono',
+            fontSize: '11px',
+            fontWeight: 700,
+            letterSpacing: '0.5px'
+          }}>
+            LOGIN
+          </Link>
+        )}
       </div>
     </nav>
   )

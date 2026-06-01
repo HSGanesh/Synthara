@@ -13,3 +13,5 @@ httpx
 fastapi
 PyJWT
 pydantic_settings
+sqlalchemy
+gitpython
