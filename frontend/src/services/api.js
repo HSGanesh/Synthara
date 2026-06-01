@@ -91,6 +91,20 @@ export const importGitHubRepo = async (repoUrl, collectionName) => {
   })
   return res.data
 }
+export const deleteChatHistory = async (chatId) => {
+  const token = localStorage.getItem('token')
+  const res = await API.delete(`/api/auth/history/${chatId}?token=${token}`)
+  return res.data
+}
+
+export const getRepoOverview = async (collectionName) => {
+  const token = localStorage.getItem('token')
+  const res = await API.post('/api/query/repo-overview', {
+    collection_name: collectionName,
+    token: token || null
+  })
+  return res.data
+}
 
 export const healthCheck = async () => {
   const res = await API.get('/api/health')
