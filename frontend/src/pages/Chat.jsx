@@ -129,7 +129,8 @@ export default function Chat() {
   const [collectionName, setCollectionName] = useState('default')
   const [collections, setCollections] = useState([])
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [history, setHistory] = useState([])
+  const [history, setHistory] = useState([])          // sidebar DB history — keep as-is
+  const [convoMemory, setConvoMemory] = useState([])
   const [deletingId, setDeletingId] = useState(null)
   const bottomRef = useRef()
 
@@ -250,7 +251,7 @@ export default function Chat() {
     try {
       const username = localStorage.getItem('username')
       const scopedCollection = `${username}__${collectionName || 'default'}`
-      const res = await askQuestion(question, scopedCollection)
+      const res = await askQuestion(question, scopedCollection, convoMemory)
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: res.answer,

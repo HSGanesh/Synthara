@@ -15,3 +15,4 @@ PyJWT
 pydantic_settings
 sqlalchemy
 gitpython
+rank_bm25==0.2.2

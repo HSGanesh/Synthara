@@ -1,7 +1,6 @@
 import re
 from app.rag.vectorstore import get_vectorstore
 
-# Maps vague intent words to concrete retrieval terms
 INTENT_REWRITES = {
     r"\baim\b": "purpose goal what does",
     r"\bpurpose\b": "purpose goal what does overview",
@@ -16,11 +15,44 @@ INTENT_REWRITES = {
     r"\boverview\b": "overview summary description",
 }
 
+# Extensions that hint a token is a filename
+FILE_EXTENSIONS = (
+    ".py", ".ts", ".tsx", ".js", ".jsx", ".md", ".json",
+    ".yaml", ".yml", ".toml", ".html", ".css", ".sh",
+    ".txt", ".go", ".rs", ".java", ".rb", ".php",
+)
+
+
 def rewrite_query(query: str) -> str:
     rewritten = query
     for pattern, replacement in INTENT_REWRITES.items():
         rewritten = re.sub(pattern, replacement, rewritten, flags=re.IGNORECASE)
     return rewritten.strip()
+
+
+def extract_filename(query: str) -> str | None:
+    """
+    Detect if the query references a specific filename.
+    e.g. 'Explain main.tsx' -> 'main.tsx'
+         'What does useSpeechRecognitionEngine.ts do?' -> 'useSpeechRecognitionEngine.ts'
+         'Summarize README' -> 'README'  (extensionless special case)
+    """
+    # Match tokens that look like filenames (with extension)
+    matches = re.findall(
+        r'\b[\w\-]+(?:\.' + '|'.join(ext.lstrip('.') for ext in FILE_EXTENSIONS) + r')\b',
+        query,
+        flags=re.IGNORECASE,
+    )
+    if matches:
+        return matches[0]
+
+    # Extensionless special cases
+    bare = re.findall(r'\b(README|CHANGELOG|LICENCE|LICENSE|Makefile|Dockerfile)\b', query)
+    if bare:
+        return bare[0]
+
+    return None
+
 
 def get_retriever(collection_name: str = "synthara_default", k: int = 6):
     vectorstore = get_vectorstore(collection_name)
@@ -34,15 +66,87 @@ def get_retriever(collection_name: str = "synthara_default", k: int = 6):
     )
     return retriever
 
+
 def get_retriever_for_query(query: str, collection_name: str = "synthara_default", k: int = 6):
     rewritten = rewrite_query(query)
+    filename = extract_filename(query)
     vectorstore = get_vectorstore(collection_name)
-    retriever = vectorstore.as_retriever(
-        search_type="mmr",
-        search_kwargs={
-            "k": k,
-            "fetch_k": k * 5,
-            "lambda_mult": 0.7,
-        }
-    )
-    return retriever, rewritten
+
+    if filename:
+        # File-level retrieval: filter by source metadata
+        retriever = vectorstore.as_retriever(
+            search_type="mmr",
+            search_kwargs={
+                "k": k,
+                "fetch_k": k * 5,
+                "lambda_mult": 0.7,
+                "filter": {"source": {"$contains": filename}},
+            }
+        )
+        # Rewrite query to focus on the file content itself
+        rewritten = f"{rewritten} {filename} file contents"
+    else:
+        retriever = vectorstore.as_retriever(
+            search_type="mmr",
+            search_kwargs={
+                "k": k,
+                "fetch_k": k * 5,
+                "lambda_mult": 0.7,
+            }
+        )
+
+    return retriever, rewritten, filename  # filename exposed for callers
+
+
+from rank_bm25 import BM25Okapi
+
+def hybrid_search(query: str, collection_name: str = "synthara_default", k: int = 6) -> list:
+    """
+    BM25 + embedding MMR retrieval, merged and reranked by combined score.
+    """
+    vectorstore = get_vectorstore(collection_name)
+
+    # 1. Embedding-based retrieval (fetch more for merging)
+    embedding_docs = vectorstore.similarity_search_with_score(query, k=k * 3)
+
+    if not embedding_docs:
+        return []
+
+    # Normalise embedding scores (lower distance = better, invert)
+    max_score = max(score for _, score in embedding_docs) or 1.0
+    embedding_scored = {
+        doc.metadata.get("source", "") + doc.page_content[:50]: (doc, 1 - (score / max_score))
+        for doc, score in embedding_docs
+    }
+
+    # 2. BM25 over the retrieved set
+    corpus = [doc.page_content for doc, _ in embedding_docs]
+    tokenized_corpus = [text.lower().split() for text in corpus]
+    bm25 = BM25Okapi(tokenized_corpus)
+    tokenized_query = query.lower().split()
+    bm25_scores = bm25.get_scores(tokenized_query)
+
+    # Normalise BM25 scores
+    max_bm25 = max(bm25_scores) or 1.0
+    bm25_normalised = [s / max_bm25 for s in bm25_scores]
+
+    # 3. Combine scores (60% embedding, 40% BM25)
+    combined = []
+    for i, (doc, _) in enumerate(embedding_docs):
+        key = doc.metadata.get("source", "") + doc.page_content[:50]
+        emb_score = embedding_scored.get(key, (doc, 0))[1]
+        final_score = 0.6 * emb_score + 0.4 * bm25_normalised[i]
+        combined.append((doc, final_score))
+
+    # Sort descending by combined score, deduplicate sources
+    combined.sort(key=lambda x: x[1], reverse=True)
+    seen, results = set(), []
+    for doc, score in combined:
+        src = doc.metadata.get("source", "")
+        if src not in seen:
+            seen.add(src)
+            results.append(doc)
+        if len(results) >= k:
+            break
+
+    return results

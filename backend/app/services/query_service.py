@@ -9,11 +9,10 @@ def process_query(
     collection_name: str = "synthara_default",
     db: Session = None,
     user_id: int = None,
+    history: list = None,        # <-- ADD
 ) -> dict:
-
     pipeline = get_rag_pipeline(collection_name=collection_name)
-    result = pipeline(question)           # returns {"answer": ..., "docs": ...}
-
+    result = pipeline(question, history=history or [])   # <-- pass history
     answer = result["answer"]
     docs = result["docs"]
     sources = list(set(

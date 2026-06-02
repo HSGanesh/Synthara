@@ -12,6 +12,8 @@ from app.rag.vectorstore import add_documents
 from app.database import get_db
 from app.config import settings
 import jwt
+import json
+from app.rag.github_loader import generate_repo_map
 
 router = APIRouter()
 
@@ -104,11 +106,22 @@ def import_github_repo(
             documents
         )
 
-        # Store in ChromaDB
-        add_documents(
-            chunks,
-            collection_name=scoped_collection
+
+        # Generate repo map and store as a special document
+        repo_map = generate_repo_map(documents)
+        repo_map["repo_name"] = repo_name
+        repo_map["repo_url"] = request.repo_url
+
+        from langchain_core.documents import Document as LCDocument
+        map_doc = LCDocument(
+            page_content=f"REPO_MAP\n{json.dumps(repo_map, indent=2)}",
+            metadata={
+                "source": "__repo_map__",
+                "file": "__repo_map__",
+                "type": "repo_map",
+            }
         )
+        add_documents([map_doc], collection_name=scoped_collection)
 
         return {
             "message": "✅ Repository imported successfully",
@@ -117,7 +130,8 @@ def import_github_repo(
             "collection": request.collection_name,
             "scoped_collection": scoped_collection,
             "files_loaded": len(documents),
-            "chunks_created": len(chunks)
+            "chunks_created": len(chunks),
+            "repo_map": repo_map,
         }
 
     except HTTPException:

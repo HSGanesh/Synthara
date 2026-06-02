@@ -211,3 +211,46 @@ def cleanup_repo(repo_path: str):
     )
 
     print(f"✅ Cleaned up {repo_path}")
+
+import json
+
+def generate_repo_map(documents: list[Document]) -> dict:
+    """
+    Build a lightweight structural map of the repository from loaded documents.
+    Categorises files into components, hooks, configs, and entry points.
+    """
+    repo_map = {
+    "readme": [],
+    "entrypoint": [],
+    "components": [],
+    "hooks": [],
+    "configs": [],
+    "services": [],
+    "api_routes": [],
+    "models": [],
+    "others": [],
+}
+
+    entrypoint_names = {"main.py", "main.ts", "main.tsx", "index.ts", "index.tsx", "index.js", "app.py", "server.py"}
+    config_extensions = {".json", ".yaml", ".yml", ".toml", ".ini", ".env"}
+
+    for doc in documents:
+        source: str = doc.metadata.get("source", "")
+        filename: str = doc.metadata.get("file", "")
+        ext: str = doc.metadata.get("language", "")
+
+        lower_name = filename.lower()
+        lower_source = source.lower()
+
+        if lower_name in entrypoint_names or lower_name in ("main.jsx",):
+            repo_map["entrypoint"].append(source)
+        elif ext in config_extensions or lower_name in ("dockerfile", ".gitignore", ".env.example"):
+            repo_map["configs"].append(source)
+        elif "hook" in lower_source or lower_name.startswith("use"):
+            repo_map["hooks"].append(source)
+        elif any(seg in lower_source for seg in ("component", "components", "widget", "ui")):
+            repo_map["components"].append(source)
+        else:
+            repo_map["others"].append(source)
+
+    return repo_map

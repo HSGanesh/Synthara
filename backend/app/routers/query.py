@@ -40,7 +40,8 @@ def ask_question(
         question=request.question,
         collection_name=request.collection_name,
         db=db,
-        user_id=user_id
+        user_id=user_id,
+        history=request.history or [],
     )
 
     return QueryResponse(
