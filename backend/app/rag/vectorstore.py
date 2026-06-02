@@ -1,22 +1,29 @@
-from langchain_community.vectorstores import Chroma
+# backend/app/rag/vectorstore.py
+from langchain_qdrant import QdrantVectorStore
 from langchain_core.documents import Document
 from app.rag.embedder import get_embedder
 from app.config import settings
 
-def get_vectorstore(collection_name: str = "synthara_default"):
+def get_vectorstore(collection_name: str = "synthara_default") -> QdrantVectorStore:
     embedder = get_embedder()
-    vectorstore = Chroma(
+    vectorstore = QdrantVectorStore.from_existing_collection(
+        embedding=embedder,
         collection_name=collection_name,
-        embedding_function=embedder,
-        persist_directory=settings.CHROMA_DB_PATH
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY,
     )
     return vectorstore
 
 def add_documents(documents: list[Document], collection_name: str = "synthara_default"):
-    vectorstore = get_vectorstore(collection_name)
-    vectorstore.add_documents(documents)
+    embedder = get_embedder()
+    QdrantVectorStore.from_documents(
+        documents=documents,
+        embedding=embedder,
+        collection_name=collection_name,
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY,
+    )
     print(f"✅ {len(documents)} chunks added to collection: {collection_name}")
-    return vectorstore
 
 def list_collections():
     import chromadb

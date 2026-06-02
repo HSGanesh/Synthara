@@ -31,3 +31,9 @@ backend/*.db
 
 # VS Code
 .vscode/
+
+# macOS
+.DS_Store
+
+# Local frontend env
+frontend/.env.local

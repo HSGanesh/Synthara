@@ -24,7 +24,6 @@ API.interceptors.response.use(
     return Promise.reject(error)
   }
 )
-
 export const askQuestion = async (question, collectionName = "synthara_default") => {
   const token = localStorage.getItem('token')
   const res = await API.post('/api/query/ask', {
