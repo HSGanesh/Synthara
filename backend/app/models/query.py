@@ -9,6 +9,7 @@ class QueryRequest(BaseModel):
     question: str
     collection_name: str = "synthara_default"
     token: Optional[str] = None
+    session_id: Optional[str] = None
     history: Optional[List[ConversationTurn]] = []   # <-- ADD THIS
 
 class QueryResponse(BaseModel):

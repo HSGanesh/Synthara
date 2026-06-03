@@ -18,6 +18,7 @@ class ChatHistory(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    session_id = Column(String, nullable=True)        # ← ADD
     collection = Column(String, default="synthara_default")
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)

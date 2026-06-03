@@ -31,16 +31,12 @@ def get_me(token: str, db: Session = Depends(get_db)):
         user = get_user_by_username(db, username)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        return {
-            "id": user.id,
-            "username": user.username,
-            "created_at": user.created_at
-        }
+        return {"id": user.id, "username": user.username, "created_at": user.created_at}
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    
+
 @router.get("/history")
 def get_chat_history(token: str, db: Session = Depends(get_db)):
     try:
@@ -52,23 +48,40 @@ def get_chat_history(token: str, db: Session = Depends(get_db)):
 
         from app.models.db_models import ChatHistory
         import json
+
         history = db.query(ChatHistory).filter(
             ChatHistory.user_id == user.id
-        ).order_by(ChatHistory.created_at.desc()).limit(50).all()
+        ).order_by(ChatHistory.created_at.asc()).limit(200).all()
 
-        return {
-            "history": [
-                {
-                    "id": h.id,
+        # Group by session_id — each session = one conversation
+        sessions = {}
+        for h in history:
+            sid = h.session_id or str(h.id)  # fallback for old records
+            if sid not in sessions:
+                sessions[sid] = {
+                    "session_id": sid,
+                    "title": h.question[:60],  # first question = conversation title
                     "collection": h.collection.replace(f"{username}__", ""),
-                    "question": h.question,
-                    "answer": h.answer,
-                    "sources": json.loads(h.sources),
-                    "created_at": str(h.created_at)
+                    "created_at": str(h.created_at),
+                    "messages": []
                 }
-                for h in history
-            ]
-        }
+            sessions[sid]["messages"].append({
+                "id": h.id,
+                "question": h.question,
+                "answer": h.answer,
+                "sources": json.loads(h.sources),
+                "created_at": str(h.created_at)
+            })
+
+        # Return newest sessions first
+        sorted_sessions = sorted(
+            sessions.values(),
+            key=lambda s: s["created_at"],
+            reverse=True
+        )
+
+        return {"history": sorted_sessions}
+
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
@@ -95,6 +108,28 @@ def delete_chat(chat_id: int, token: str, db: Session = Depends(get_db)):
         db.delete(chat)
         db.commit()
         return {"message": "Chat deleted"}
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+@router.delete("/history/session/{session_id}")
+def delete_session(session_id: str, token: str, db: Session = Depends(get_db)):
+    """Delete all messages in a session."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username = payload.get("sub")
+        user = get_user_by_username(db, username)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        from app.models.db_models import ChatHistory
+        db.query(ChatHistory).filter(
+            ChatHistory.session_id == session_id,
+            ChatHistory.user_id == user.id
+        ).delete()
+        db.commit()
+        return {"message": "Session deleted"}
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:

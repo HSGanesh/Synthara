@@ -42,6 +42,7 @@ def ask_question(
         db=db,
         user_id=user_id,
         history=request.history or [],
+        session_id=getattr(request, 'session_id', None),  # ← ADD
     )
 
     return QueryResponse(
@@ -135,12 +136,13 @@ Repository files:
         from app.models.db_models import ChatHistory
         import json
         chat = ChatHistory(
-            user_id=user_id,
-            collection=request.collection_name,
-            question="Explain this repository",
-            answer=overview_text,
-            sources=json.dumps(list(seen_sources)[:5])
-        )
+        user_id=user_id,
+        session_id=getattr(request, 'session_id', None),  # ← ADD
+        collection=request.collection_name,
+        question="Explain this repository",
+        answer=overview_text,
+        sources=json.dumps(list(seen_sources)[:5])
+    )
         db.add(chat)
         db.commit()
 
