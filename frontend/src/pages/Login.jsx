@@ -19,7 +19,9 @@ export default function Login() {
         const res = await login(username, password)
 
         localStorage.setItem('token', res.access_token)
-        localStorage.setItem('username', username)
+        // Decode JWT to get exact username as stored in backend
+        const payload = JSON.parse(atob(res.access_token.split('.')[1]))
+        localStorage.setItem('username', payload.sub)
 
         window.location.href = '/chat'
 

@@ -54,7 +54,7 @@ def get_my_collections(token: str, db: Session = Depends(get_db)):
         user_collections = [
             col.replace(prefix, "")
             for col in all_collections
-            if col.startswith(prefix)  # strictly only user's collections
+            if col.lower().startswith(prefix.lower())  # case-insensitive match
         ]
 
         # Filter out any leftover default names
