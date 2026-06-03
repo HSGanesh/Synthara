@@ -25,7 +25,12 @@ def add_documents(documents: list[Document], collection_name: str = "synthara_de
     )
     print(f"✅ {len(documents)} chunks added to collection: {collection_name}")
 
-def list_collections():
-    import chromadb
-    client = chromadb.PersistentClient(path=settings.CHROMA_DB_PATH)
-    return [col.name for col in client.list_collections()]
+
+def list_collections() -> list[str]:
+    from qdrant_client import QdrantClient
+    client = QdrantClient(
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY or None,
+    )
+    collections = client.get_collections().collections
+    return [col.name for col in collections]
