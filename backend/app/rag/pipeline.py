@@ -202,12 +202,14 @@ def get_rag_pipeline(collection_name: str = "synthara_default"):
         # ── Feature 4: repo map fast-path for structural questions ────────
         if any(kw in resolved_question.lower() for kw in STRUCTURAL_KEYWORDS):
             try:
+                # Filter by exact source match using Qdrant Filter
+                _repo_map_filter = Filter(
+                    must=[FieldCondition(key="metadata.source", match=MatchValue(value="__repo_map__"))]
+                )
                 map_docs = vectorstore.similarity_search(
                     "REPO_MAP",
                     k=1,
-                    filter=Filter(
-                        must=[FieldCondition(key="metadata.source", match=MatchValue(value="__repo_map__"))]
-                    ),
+                    filter=_repo_map_filter,
                 )
                 if map_docs:
                     map_data = json.loads(

@@ -74,7 +74,9 @@ def get_retriever_for_query(query: str, collection_name: str = "synthara_default
     vectorstore = get_vectorstore(collection_name)
 
     if filename:
-        # File-level retrieval: filter by source metadata using Qdrant native Filter
+        # File-level retrieval: use similarity_search directly with a Qdrant filter.
+        # We wrap it in a custom callable retriever to avoid MMR+filter incompatibility.
+        # MMR internally calls query_points which doesn't support all filter types.
         qdrant_filter = Filter(
             must=[
                 FieldCondition(
@@ -83,15 +85,18 @@ def get_retriever_for_query(query: str, collection_name: str = "synthara_default
                 )
             ]
         )
-        retriever = vectorstore.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": k,
-                "fetch_k": k * 5,
-                "lambda_mult": 0.7,
-                "filter": qdrant_filter,
-            }
-        )
+
+        class _FileRetriever:
+            """Thin wrapper so pipeline can call .invoke() on a file-scoped search."""
+            def __init__(self, vs, filt, k):
+                self._vs = vs
+                self._filter = filt
+                self._k = k
+
+            def invoke(self, query):
+                return self._vs.similarity_search(query, k=self._k, filter=self._filter)
+
+        retriever = _FileRetriever(vectorstore, qdrant_filter, k)
         # Rewrite query to focus on the file content itself
         rewritten = f"{rewritten} {filename} file contents"
     else:
