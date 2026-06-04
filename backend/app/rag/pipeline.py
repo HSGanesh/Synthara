@@ -30,24 +30,25 @@ PROMPT_TEMPLATE = """
 You are Synthara, an intelligent developer assistant.
 
 {history_block}
-Answer the user's question using the information provided in the context below.
+Answer the user's question using ONLY the information provided in the context below.
 
 Rules:
-1. Use the context to answer. If the context contains relevant information, use it fully.
+1. Use ONLY the context to answer. Never invent, infer, or guess facts that are not explicitly present in the context.
 2. Refer to prior conversation turns if they are relevant to the current question.
 3. Resolve pronouns like "its", "that file", "it", "them" using the conversation history.
-4. The context contains file contents from a software repository.
-   Questions about the project's purpose, aim, goal, what it does, overview —
-   these can be answered from README files, package.json, config files, or
-   any file that describes the project.
-5. Only respond with "I don't have enough information in the current knowledge base."
-   if the context is genuinely empty or completely unrelated to the question.
-6. Do not be overly strict. If the context gives partial clues about the answer,
-   synthesise a reasonable answer from those clues.
-7. Use clean, concise formatting. Use bullet points when listing multiple items.
-8. Use markdown code blocks for commands or code snippets.
-9. Do NOT mention source file names in your answer.
-10. Provide only the answer. Source information is handled separately.
+4. The context contains file contents from a software repository or document.
+   Questions about purpose, aim, goal, overview — answer from README, package.json, or config files.
+5. CRITICAL — Grounding rule: If a specific fact (a number, name, date, score, value, version, etc.)
+   is NOT explicitly written in the context, you MUST say you cannot find that information.
+   Do NOT approximate, estimate, or guess. Do NOT use numbers from your training data.
+6. If the context is empty or completely unrelated, respond:
+   "I couldn't find that information in the ingested documents. Try asking something else or re-check the uploaded file."
+7. Never say "based on my knowledge" or "typically" or "usually" when answering factual questions.
+   If you don't see it in the context, say so clearly.
+8. Use clean, concise formatting. Use bullet points when listing multiple items.
+9. Use markdown code blocks for commands or code snippets.
+10. Do NOT mention source file names in your answer.
+11. Provide only the answer. Source information is handled separately.
 
 Context:
 {context}
@@ -113,6 +114,49 @@ def resolve_question(question: str, history: list) -> str:
             return f"{last_user_msg} — follow-up: {question}"
     return question
 
+
+
+
+# ---------------------------------------------------------------------------
+# Hallucination guard
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+def _extract_numbers(text: str) -> set:
+    """Pull every standalone number from a text string."""
+    return set(_re.findall(r'\b\d+(?:\.\d+)?\b', text))
+
+def hallucination_guard(answer: str, context: str, question: str) -> str:
+    """
+    Detect when the LLM produced a specific numeric or factual value that
+    does NOT appear in the retrieved context — a strong signal for hallucination.
+
+    Strategy:
+      - Extract all numbers mentioned in the answer.
+      - For each number, check whether it actually appears in the context.
+      - If a significant number (>= 2 digits, or a decimal) appears in the
+        answer but NOT in the context, append a grounding disclaimer.
+    """
+    answer_nums = _extract_numbers(answer)
+    context_nums = _extract_numbers(context)
+
+    # Numbers in the answer that are absent from the context
+    ungrounded = {
+        n for n in answer_nums
+        if n not in context_nums and (len(n) >= 2 or "." in n)
+    }
+
+    if ungrounded:
+        disclaimer = (
+            "\n\n---\n"
+            "⚠️ **Accuracy notice:** I couldn't verify this answer against the "
+            "ingested documents. The specific value(s) above may not be accurate. "
+            "Please cross-check with the original source."
+        )
+        return answer + disclaimer
+
+    return answer
 
 # ---------------------------------------------------------------------------
 # Pipeline factory
@@ -181,9 +225,13 @@ def get_rag_pipeline(collection_name: str = "synthara_default"):
         if filename:
             # File-level query — use the metadata-filtered retriever directly
             docs = retriever.invoke(rewritten)
+        # If file-scoped retrieval returned nothing, widen to full collection
+        if not docs:
+            fallback = vectorstore.similarity_search(rewritten, k=10)
+            docs = fallback
         else:
             # General query — BM25 + embedding hybrid search
-            docs = hybrid_search(rewritten, collection_name=collection_name, k=6)
+            docs = hybrid_search(rewritten, collection_name=collection_name, k=10)
 
         # ── Generate answer ───────────────────────────────────────────────
         context = format_docs(docs)
@@ -193,6 +241,11 @@ def get_rag_pipeline(collection_name: str = "synthara_default"):
             "context": context,
             "question": question,
         })
+
+        # ── Hallucination guard ───────────────────────────────────────────
+        # If the LLM produced a confident numeric/factual answer but the
+        # context doesn't actually contain it, flag or suppress the answer.
+        answer = hallucination_guard(answer, context, question)
 
         return {"answer": answer, "docs": docs}
 

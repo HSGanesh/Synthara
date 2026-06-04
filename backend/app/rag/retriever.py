@@ -138,14 +138,25 @@ def hybrid_search(query: str, collection_name: str = "synthara_default", k: int 
         final_score = 0.6 * emb_score + 0.4 * bm25_normalised[i]
         combined.append((doc, final_score))
 
-    # Sort descending by combined score, deduplicate sources
+    # Sort descending by combined score
     combined.sort(key=lambda x: x[1], reverse=True)
-    seen, results = set(), []
+
+    # Dedup by content fingerprint (not source) so multi-chunk single-file
+    # documents (e.g. resumes, PDFs) aren't collapsed to just one chunk.
+    # We still cap each source at max_per_source chunks to ensure diversity.
+    max_per_source = 4
+    source_counts: dict = {}
+    seen_content, results = set(), []
     for doc, score in combined:
-        src = doc.metadata.get("source", "")
-        if src not in seen:
-            seen.add(src)
-            results.append(doc)
+        source = doc.metadata.get("source", "")
+        fingerprint = doc.page_content[:80]
+        if fingerprint in seen_content:
+            continue
+        if source_counts.get(source, 0) >= max_per_source:
+            continue
+        seen_content.add(fingerprint)
+        source_counts[source] = source_counts.get(source, 0) + 1
+        results.append(doc)
         if len(results) >= k:
             break
 
