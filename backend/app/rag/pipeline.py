@@ -195,8 +195,20 @@ def get_rag_pipeline(collection_name: str = "synthara_default"):
 
         # ── Feature 3 + 5: file-level retrieval / hybrid search ──────────
         from app.rag.retriever import get_retriever_for_query, hybrid_search
+
+        # Detect "list all / retrieve all / show everything" intent
+        # These queries need many more chunks to cover the full document
+        _q_lower = resolved_question.lower()
+        _is_list_all = any(phrase in _q_lower for phrase in [
+            "all project", "all the project", "retrieve all", "list all",
+            "show all", "every project", "all experience", "all skills",
+            "all education", "complete list", "full list", "everything",
+            "all work", "all position", "all job",
+        ])
+        _retrieval_k = 20 if _is_list_all else 10
+
         retriever, rewritten, filename = get_retriever_for_query(
-            resolved_question, collection_name=collection_name
+            resolved_question, collection_name=collection_name, k=_retrieval_k
         )
 
         # ── Feature 4: repo map fast-path for structural questions ────────
@@ -232,10 +244,10 @@ def get_rag_pipeline(collection_name: str = "synthara_default"):
             docs = retriever.invoke(rewritten)
             # If file-scoped retrieval returned nothing, widen to full collection
             if not docs:
-                docs = vectorstore.similarity_search(rewritten, k=10)
+                docs = vectorstore.similarity_search(rewritten, k=_retrieval_k)
         else:
             # General query — BM25 + embedding hybrid search
-            docs = hybrid_search(rewritten, collection_name=collection_name, k=10)
+            docs = hybrid_search(rewritten, collection_name=collection_name, k=_retrieval_k)
 
         # ── Generate answer ───────────────────────────────────────────────
         context = format_docs(docs)
@@ -249,7 +261,10 @@ def get_rag_pipeline(collection_name: str = "synthara_default"):
         # ── Hallucination guard ───────────────────────────────────────────
         # If the LLM produced a confident numeric/factual answer but the
         # context doesn't actually contain it, flag or suppress the answer.
-        answer = hallucination_guard(answer, context, question)
+        # Skip hallucination guard for list/retrieval queries —
+        # year numbers like 2024/2025 in project dates falsely trigger it
+        if not _is_list_all:
+            answer = hallucination_guard(answer, context, question)
 
         return {"answer": answer, "docs": docs}
 
