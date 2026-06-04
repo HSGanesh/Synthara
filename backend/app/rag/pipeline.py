@@ -3,6 +3,7 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from app.rag.retriever import get_retriever
+from qdrant_client.models import Filter, FieldCondition, MatchValue
 from app.config import settings
 
 # ---------------------------------------------------------------------------
@@ -204,7 +205,9 @@ def get_rag_pipeline(collection_name: str = "synthara_default"):
                 map_docs = vectorstore.similarity_search(
                     "REPO_MAP",
                     k=1,
-                    filter={"source": "__repo_map__"},
+                    filter=Filter(
+                        must=[FieldCondition(key="metadata.source", match=MatchValue(value="__repo_map__"))]
+                    ),
                 )
                 if map_docs:
                     map_data = json.loads(

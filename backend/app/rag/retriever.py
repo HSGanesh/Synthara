@@ -1,5 +1,6 @@
 import re
 from app.rag.vectorstore import get_vectorstore
+from qdrant_client.models import Filter, FieldCondition, MatchText, MatchValue
 
 INTENT_REWRITES = {
     r"\baim\b": "purpose goal what does",
@@ -73,14 +74,22 @@ def get_retriever_for_query(query: str, collection_name: str = "synthara_default
     vectorstore = get_vectorstore(collection_name)
 
     if filename:
-        # File-level retrieval: filter by source metadata
+        # File-level retrieval: filter by source metadata using Qdrant native Filter
+        qdrant_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="metadata.source",
+                    match=MatchText(text=filename),
+                )
+            ]
+        )
         retriever = vectorstore.as_retriever(
             search_type="mmr",
             search_kwargs={
                 "k": k,
                 "fetch_k": k * 5,
                 "lambda_mult": 0.7,
-                "filter": {"source": {"$contains": filename}},
+                "filter": qdrant_filter,
             }
         )
         # Rewrite query to focus on the file content itself
