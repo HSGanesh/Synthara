@@ -88,15 +88,23 @@ def get_retriever_for_query(query: str, collection_name: str = "synthara_default
 
         class _FileRetriever:
             """Thin wrapper so pipeline can call .invoke() on a file-scoped search."""
-            def __init__(self, vs, filt, k):
+            def __init__(self, vs, filt, k, filename):
                 self._vs = vs
                 self._filter = filt
                 self._k = k
+                self._filename = filename
 
             def invoke(self, query):
-                return self._vs.similarity_search(query, k=self._k, filter=self._filter)
+                # Fetch more docs then filter by filename in Python
+                # avoids all Qdrant filter version incompatibilities
+                all_docs = self._vs.similarity_search(query, k=self._k * 4)
+                filtered = [
+                    doc for doc in all_docs
+                    if self._filename.lower() in doc.metadata.get("source", "").lower()
+                ]
+                return filtered if filtered else all_docs[:self._k]
 
-        retriever = _FileRetriever(vectorstore, qdrant_filter, k)
+        retriever = _FileRetriever(vectorstore, qdrant_filter, k, filename)
         # Rewrite query to focus on the file content itself
         rewritten = f"{rewritten} {filename} file contents"
     else:
