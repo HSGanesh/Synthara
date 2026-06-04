@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import FileUpload from '../components/FileUpload'
-import { uploadFile } from '../services/api'
+import { uploadFile, updateLastCollection } from '../services/api'
 
 export default function Ingest() {
   const [loading, setLoading] = useState(false)
@@ -22,6 +22,7 @@ export default function Ingest() {
         const scopedCollection = `${username}__${collectionName.trim()}`
         const res = await uploadFile(file, scopedCollection)
         setResult(res)
+        updateLastCollection(scopedCollection).catch(() => {})
     } catch (err) {
         setError(err.response?.data?.detail || 'Upload failed. Check if backend is running.')
     } finally {

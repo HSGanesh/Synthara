@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { importGitHubRepo } from '../services/api'
+import { importGitHubRepo, updateLastCollection } from '../services/api'
 
 export default function GitHub() {
   const [repoUrl, setRepoUrl] = useState('')
@@ -25,6 +25,8 @@ export default function GitHub() {
     try {
       const res = await importGitHubRepo(repoUrl.trim(), collectionName.trim())
       setResult(res)
+      const username = localStorage.getItem('username')
+      updateLastCollection(`${username}__${collectionName.trim()}`).catch(() => {})
     } catch (err) {
       setError(err.response?.data?.detail || 'Import failed. Check if backend is running.')
     } finally {

@@ -10,6 +10,7 @@ from app.rag.vectorstore import get_vectorstore
 
 router = APIRouter()
 
+
 def get_current_user_id(token: str = None, db: Session = None) -> int | None:
     if not token:
         return None
@@ -22,19 +23,13 @@ def get_current_user_id(token: str = None, db: Session = None) -> int | None:
     except Exception:
         return None
 
+
 @router.post("/ask", response_model=QueryResponse)
-def ask_question(
-    request: QueryRequest,
-    db: Session = Depends(get_db)
-):
+def ask_question(request: QueryRequest, db: Session = Depends(get_db)):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    # Extract token from request if provided
-    user_id = get_current_user_id(
-        token=getattr(request, 'token', None),
-        db=db
-    )
+    user_id = get_current_user_id(token=getattr(request, "token", None), db=db)
 
     result = process_query(
         question=request.question,
@@ -42,25 +37,26 @@ def ask_question(
         db=db,
         user_id=user_id,
         history=request.history or [],
-        session_id=getattr(request, 'session_id', None),  # ← ADD
+        session_id=getattr(request, "session_id", None),
     )
 
     return QueryResponse(
         answer=result["answer"],
         sources=result["sources"],
-        collection=result["collection"]
+        collection=result["collection"],
+        session_id=result.get("session_id"),
+        conversation_title=result.get("conversation_title"),
     )
+
 
 class RepoOverviewRequest(BaseModel):
     collection_name: str
     token: str = None
+    session_id: str = None
 
 
 @router.post("/repo-overview")
-def get_repo_overview(
-    request: RepoOverviewRequest,
-    db: Session = Depends(get_db)
-):
+def get_repo_overview(request: RepoOverviewRequest, db: Session = Depends(get_db)):
     from langchain_groq import ChatGroq
 
     vectorstore = get_vectorstore(request.collection_name)
@@ -75,7 +71,7 @@ def get_repo_overview(
     if not raw:
         raise HTTPException(
             status_code=404,
-            detail="No documents found in this collection. Ingest a repository first."
+            detail="No documents found in this collection. Ingest a repository first.",
         )
 
     seen_sources = set()
@@ -124,7 +120,7 @@ Repository files:
         llm = ChatGroq(
             model="llama-3.3-70b-versatile",
             api_key=settings.GROQ_API_KEY,
-            temperature=0.1
+            temperature=0.1,
         )
         response = llm.invoke(OVERVIEW_PROMPT)
         overview_text = response.content
@@ -132,22 +128,39 @@ Repository files:
         raise HTTPException(status_code=500, detail=f"LLM generation failed: {e}")
 
     user_id = get_current_user_id(token=request.token, db=db)
-    if user_id:
-        from app.models.db_models import ChatHistory
+    conversation_title = None
+
+    if user_id and request.session_id:
+        from app.services.query_service import get_or_create_conversation
+        from app.models.db_models import Message, User
         import json
-        chat = ChatHistory(
-        user_id=user_id,
-        session_id=getattr(request, 'session_id', None),  # ← ADD
-        collection=request.collection_name,
-        question="Explain this repository",
-        answer=overview_text,
-        sources=json.dumps(list(seen_sources)[:5])
-    )
-        db.add(chat)
+        from datetime import datetime
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            user.last_active_collection = request.collection_name
+
+        conv = get_or_create_conversation(
+            db=db,
+            user_id=user_id,
+            session_id=request.session_id,
+            collection_name=request.collection_name,
+            first_question="Explain this repository",
+        )
+        conversation_title = conv.title
+        msg = Message(
+            conversation_id=conv.id,
+            question="Explain this repository",
+            answer=overview_text,
+            sources=json.dumps(list(seen_sources)[:5]),
+            created_at=datetime.utcnow(),
+        )
+        db.add(msg)
         db.commit()
 
     return {
         "overview": overview_text,
         "files_analysed": len(seen_sources),
-        "collection": request.collection_name
+        "collection": request.collection_name,
+        "conversation_title": conversation_title,
     }

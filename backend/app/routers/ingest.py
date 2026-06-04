@@ -5,15 +5,18 @@ from app.rag.loader import load_file
 from app.rag.chunker import chunk_documents
 from app.rag.vectorstore import add_documents, list_collections
 from app.config import settings
-import shutil, os
+import shutil, os, jwt
 
 router = APIRouter()
 
-# Track last uploaded collection
-last_collection = {"name": "synthara_default"}
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...), collection_name: str = "synthara_default"):
+async def upload_file(
+    file: UploadFile = File(...),
+    collection_name: str = "synthara_default",
+    token: str = None,
+    db: Session = Depends(get_db),
+):
     allowed = [".pdf", ".txt", ".md"]
     ext = os.path.splitext(file.filename)[-1].lower()
 
@@ -30,21 +33,29 @@ async def upload_file(file: UploadFile = File(...), collection_name: str = "synt
     chunks = chunk_documents(documents)
     add_documents(chunks, collection_name=collection_name)
 
-    # Update last uploaded collection
-    last_collection["name"] = collection_name
+    # Update last_active_collection for the user
+    if token:
+        try:
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            username = payload.get("sub")
+            from app.models.db_models import User
+            user = db.query(User).filter(User.username == username).first()
+            if user:
+                user.last_active_collection = collection_name
+                db.commit()
+        except Exception:
+            pass
 
     return {
         "message": f"✅ '{file.filename}' ingested into collection '{collection_name}'",
         "chunks_created": len(chunks),
-        "collection": collection_name
+        "collection": collection_name,
     }
+
 
 @router.get("/my-collections")
 def get_my_collections(token: str, db: Session = Depends(get_db)):
     try:
-        import jwt
-        from app.models.db_models import User
-
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username = payload.get("sub")
 
@@ -54,14 +65,24 @@ def get_my_collections(token: str, db: Session = Depends(get_db)):
         user_collections = [
             col.replace(prefix, "")
             for col in all_collections
-            if col.lower().startswith(prefix.lower())  # case-insensitive match
+            if col.lower().startswith(prefix.lower())
         ]
 
-        # Filter out any leftover default names
         excluded = {"synthara_default", "default"}
         user_collections = [c for c in user_collections if c not in excluded]
 
-        return {"collections": user_collections}
+        # Also return last_active_collection
+        from app.models.db_models import User
+        user = db.query(User).filter(User.username == username).first()
+        last_active = user.last_active_collection if user else None
+        # Strip username prefix from last_active if present
+        if last_active and last_active.startswith(prefix):
+            last_active = last_active.replace(prefix, "")
+
+        return {
+            "collections": user_collections,
+            "last_active_collection": last_active,
+        }
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
