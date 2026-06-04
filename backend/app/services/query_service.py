@@ -72,7 +72,16 @@ def process_query(
     session_id: str = None,
 ) -> dict:
     pipeline = get_rag_pipeline(collection_name=collection_name)
-    result = pipeline(question, history=history or [])
+
+    # Normalise history: ConversationTurn Pydantic objects -> plain dicts
+    # pipeline.py uses turn.get("role") / turn.get("content") so must be dicts
+    def _to_dict(turn):
+        if isinstance(turn, dict):
+            return turn
+        return {"role": getattr(turn, "role", "user"), "content": getattr(turn, "content", "")}
+
+    history_dicts = [_to_dict(t) for t in (history or [])]
+    result = pipeline(question, history=history_dicts)
     answer = result["answer"]
     docs = result["docs"]
     sources = list(set(doc.metadata.get("source", "Unknown") for doc in docs))
