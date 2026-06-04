@@ -225,10 +225,9 @@ def get_rag_pipeline(collection_name: str = "synthara_default"):
         if filename:
             # File-level query — use the metadata-filtered retriever directly
             docs = retriever.invoke(rewritten)
-        # If file-scoped retrieval returned nothing, widen to full collection
-        if not docs:
-            fallback = vectorstore.similarity_search(rewritten, k=10)
-            docs = fallback
+            # If file-scoped retrieval returned nothing, widen to full collection
+            if not docs:
+                docs = vectorstore.similarity_search(rewritten, k=10)
         else:
             # General query — BM25 + embedding hybrid search
             docs = hybrid_search(rewritten, collection_name=collection_name, k=10)
