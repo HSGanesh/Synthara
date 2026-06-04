@@ -514,7 +514,7 @@ export default function Chat() {
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', paddingTop: '56px', overflow: 'hidden' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: isMobile ? 'column' : 'row', paddingTop: '56px', overflow: 'hidden' }}>
 
       {/* ── Mobile backdrop ── */}
       {isMobile && sidebarOpen && (
